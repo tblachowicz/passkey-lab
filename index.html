@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Passkey Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a lab bench. Controls and saved passkeys on the left, the decoded ceremony trace on the right; one column on phones. */
+:root {
+  --bg: #edf0f5;
+  --surface: #ffffff;
+  --sunk: #f5f7fa;
+  --ink: #131a2c;
+  --muted: #5b6479;
+  --line: #d8deea;
+  --accent: #b4530a;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbeadb;
+  --ok: #157a3c;
+  --ok-soft: #e1f3e7;
+  --bad: #b42121;
+  --bad-soft: #fbe4e4;
+  --code-bg: #121a2c;
+  --code-fg: #d5ddee;
+  --shadow: 0 1px 2px rgba(19, 26, 44, .06), 0 8px 24px -12px rgba(19, 26, 44, .18);
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1020; --surface: #131a2c; --sunk: #0f1526; --ink: #e7ecf5; --muted: #95a0b8; --line: #252f47;
+    --accent: #f2a23a; --accent-ink: #1b1204; --accent-soft: #3a2a13;
+    --ok: #4fd98a; --ok-soft: #10291b; --bad: #f87878; --bad-soft: #3a1616;
+    --code-bg: #080c18; --code-fg: #d5ddee;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1020; --surface: #131a2c; --sunk: #0f1526; --ink: #e7ecf5; --muted: #95a0b8; --line: #252f47;
+  --accent: #f2a23a; --accent-ink: #1b1204; --accent-soft: #3a2a13;
+  --ok: #4fd98a; --ok-soft: #10291b; --bad: #f87878; --bad-soft: #3a1616;
+  --code-bg: #080c18; --code-fg: #d5ddee;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px -14px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 22px; }
+
+/* Header */
+header { display: grid; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.mark { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.mark svg { width: 24px; height: 24px; }
+h1 { font: 700 clamp(1.7rem, 3.4vw, 2.3rem)/1.05 var(--f-display); letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 64ch; }
+.env { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 13px; color: var(--muted); }
+.chip b { color: var(--ink); font-weight: 700; }
+.chip code { font: 500 12px var(--f-mono); color: var(--ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.on { background: var(--ok); }
+.dot.off { background: var(--bad); }
+.dot.maybe { background: var(--accent); }
+
+/* Bench */
+.bench { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 880px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 18px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); min-width: 0; }
+.panel-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 16px 18px 0; }
+.panel-bd { padding: 16px 18px 18px; display: grid; gap: 14px; }
+h2 { font: 700 1.05rem/1.2 var(--f-display); margin: 0; letter-spacing: -.01em; }
+.eyebrow { font: 500 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* Tabs */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--sunk); border: 1px solid var(--line); border-radius: 9px; margin: 16px 18px 0; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--muted); font: 700 14px var(--f-body); padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* Forms */
+.field { display: grid; gap: 6px; }
+label, .label { font-weight: 700; font-size: 13px; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+input[type="text"], select {
+  width: 100%; font: 15px var(--f-body); color: var(--ink); background: var(--sunk);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+}
+input[type="text"]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+details.opts { border: 1px dashed var(--line); border-radius: 8px; padding: 0 12px; }
+details.opts summary { cursor: pointer; padding: 10px 0; font-weight: 700; font-size: 13px; color: var(--muted); }
+details.opts[open] summary { color: var(--ink); }
+.opts-grid { display: grid; gap: 10px; padding-bottom: 12px; }
+.opts-grid .field { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; }
+.opts-grid label { font-weight: 400; color: var(--muted); }
+.opts-grid select { padding: 6px 8px; font-size: 14px; }
+
+.btn {
+  appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  font: 700 15px var(--f-body); border-radius: 8px; padding: 11px 16px; cursor: pointer;
+  border: 1px solid transparent; transition: transform .08s ease, filter .15s ease;
+}
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.06); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-quiet { background: transparent; color: var(--ink); border-color: var(--line); padding: 7px 12px; font-size: 13px; }
+.btn-quiet:hover { background: var(--sunk); }
+.btn-danger { background: var(--bad); color: var(--surface); border-color: var(--bad); }
+.btn[disabled] { opacity: .55; cursor: progress; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.notice { border-radius: 8px; padding: 10px 12px; font-size: 13.5px; background: var(--sunk); border: 1px solid var(--line); }
+.notice.bad { background: var(--bad-soft); border-color: transparent; color: var(--ink); }
+.notice.bad strong { color: var(--bad); }
+.notice.ok { background: var(--ok-soft); border-color: transparent; }
+.notice.ok strong { color: var(--ok); }
+
+/* Session */
+.session { display: flex; gap: 14px; align-items: center; padding: 16px 18px; flex-wrap: wrap; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; font: 700 16px var(--f-display); flex: none; }
+.session-txt { flex: 1 1 160px; min-width: 0; }
+.session-txt strong { display: block; font: 700 1.05rem var(--f-display); }
+.session-txt span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+/* Saved passkeys */
+.keys { list-style: none; margin: 0; padding: 0; display: grid; }
+.key { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.key:first-child { border-top: 0; padding-top: 2px; }
+.key-ico { width: 34px; height: 34px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.key-ico svg { width: 18px; height: 18px; }
+.key-name { font-weight: 700; overflow-wrap: anywhere; }
+.key-meta { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.key-meta code { font: 12px var(--f-mono); }
+.tag { display: inline-block; font: 500 10.5px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: var(--sunk); border: 1px solid var(--line); color: var(--muted); }
+.tag.sync { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+
+/* Trace */
+.trace-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 20px 4px; }
+.trace-title { display: grid; gap: 2px; }
+.trace-title h2 { font-size: 1.25rem; }
+.status-pill { font: 500 12px var(--f-mono); padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.status-pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.status-pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.status-pill.run { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.steps { list-style: none; margin: 0; padding: 12px 20px 22px; display: grid; }
+.step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; position: relative; padding-bottom: 20px; }
+.step:last-child { padding-bottom: 0; }
+.step::before { content: ""; position: absolute; left: 14px; top: 32px; bottom: 2px; width: 2px; background: var(--line); }
+.step:last-child::before { display: none; }
+.node { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 500 13px var(--f-mono); background: var(--surface); border: 2px solid var(--line); color: var(--muted); position: relative; z-index: 1; }
+.step.ok .node { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.step.bad .node { background: var(--bad); border-color: var(--bad); color: var(--surface); }
+.step.run .node { border-color: var(--accent); color: var(--accent); }
+.step.run .node::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--accent); opacity: .5; animation: pulse 1.4s ease-out infinite; }
+@keyframes pulse { from { transform: scale(.8); opacity: .6; } to { transform: scale(1.25); opacity: 0; } }
+.step.wait .step-body { opacity: .72; }
+.step-body { min-width: 0; display: grid; gap: 8px; padding-top: 3px; }
+.step-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.step-title h3 { font: 700 1rem/1.3 var(--f-display); margin: 0; }
+.step-title .who { font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.step-desc { margin: 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 14px; margin: 0; padding: 10px 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font: 12.5px/1.5 var(--f-mono); overflow-wrap: anywhere; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.kv dd .v { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .kv { grid-template-columns: minmax(0, 1fr); gap: 0; } .kv dd { margin-bottom: 7px; } }
+.verdict { font: 700 10.5px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.bad { background: var(--bad-soft); color: var(--bad); }
+.verdict.info { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.flag { font: 500 12px var(--f-mono); padding: 3px 8px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); }
+.flag.on { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.flag.on::before { content: "1 "; color: var(--accent); }
+.flag:not(.on)::before { content: "0 "; }
+.bytes { display: flex; gap: 3px; font: 500 11px var(--f-mono); }
+.seg { min-width: 3.6rem; display: grid; gap: 4px; }
+.seg i { display: block; height: 10px; border-radius: 3px; background: var(--muted); opacity: .35; }
+.seg.hash i { background: var(--ink); opacity: .55; }
+.seg.flg i { background: var(--accent); opacity: 1; }
+.seg.cnt i { background: var(--ok); opacity: .8; }
+.seg.att i { background: var(--accent); opacity: .45; }
+.seg span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details.raw summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 700; width: max-content; max-width: 100%; }
+details.raw summary:hover { color: var(--ink); }
+pre.code { margin: 8px 0 0; padding: 12px 14px; background: var(--code-bg); color: var(--code-fg); border-radius: 8px; font: 12px/1.6 var(--f-mono); overflow-x: auto; max-height: 340px; }
+
+.foot { color: var(--muted); font-size: 13px; max-width: 80ch; }
+.foot a { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .step.run .node::after { animation: none; }
+  .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4.5"/><path d="M11.2 11.2 20 20M16.5 16.5l2-2M14 14l2-2"/></svg>
+      </div>
+      <h1>Passkey Lab</h1>
+    </div>
+    <p class="lede">Create a passkey, then sign in with it. The page plays the relying party's server as well, so every step of the WebAuthn ceremony is decoded and checked right here in your browser, down to the signature.</p>
+    <div class="env" id="env" aria-label="Browser capabilities"></div>
+  </header>
+
+  <div class="bench">
+    <div class="col">
+      <section class="panel" id="session" hidden aria-live="polite"></section>
+
+      <section class="panel" aria-label="Account">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="tab-register" aria-selected="true" aria-controls="pane-register">Create passkey</button>
+          <button class="tab" role="tab" id="tab-signin" aria-selected="false" aria-controls="pane-signin">Sign in</button>
+        </div>
+
+        <form class="panel-bd" id="pane-register" role="tabpanel" aria-labelledby="tab-register" novalidate>
+          <div class="field">
+            <label for="reg-username">Username</label>
+            <input type="text" id="reg-username" value="ada.lovelace" autocomplete="username" spellcheck="false" autocapitalize="off">
+          </div>
+          <div class="field">
+            <label for="reg-display">Display name</label>
+            <input type="text" id="reg-display" value="Ada Lovelace" autocomplete="name">
+          </div>
+          <details class="opts">
+            <summary>Ceremony options</summary>
+            <div class="opts-grid">
+              <div class="field">
+                <label for="opt-attach">Authenticator</label>
+                <select id="opt-attach">
+                  <option value="any">Any</option>
+                  <option value="platform">This device</option>
+                  <option value="cross-platform">Security key or phone</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="opt-uv">User verification</label>
+                <select id="opt-uv">
+                  <option value="preferred">Preferred</option>
+                  <option value="required">Required</option>
+                  <option value="discouraged">Discouraged</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="opt-att">Attestation</label>
+                <select id="opt-att">
+                  <option value="none">None</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </div>
+            </div>
+          </details>
+          <div class="notice bad" id="frame-create" hidden><strong>Passkeys are blocked in this frame.</strong> The page is embedded somewhere that doesn't grant the <code>publickey-credentials-create</code> permission, so the browser will refuse. Serve the same file from <code>localhost</code> or any HTTPS site and it works unchanged.</div>
+          <button class="btn btn-primary" type="submit" id="btn-register">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4.5"/><path d="M11.2 11.2 20 20M16.5 16.5l2-2"/></svg>
+            Create passkey
+          </button>
+          <p class="hint">Your device asks you to confirm with a fingerprint, face, PIN or security key. Nothing secret is sent to the page, only a new public key.</p>
+          <div id="reg-msg" aria-live="polite"></div>
+        </form>
+
+        <form class="panel-bd" id="pane-signin" role="tabpanel" aria-labelledby="tab-signin" hidden novalidate>
+          <div class="field">
+            <label for="si-username">Username</label>
+            <input type="text" id="si-username" autocomplete="username webauthn" placeholder="Focus here to pick a passkey" spellcheck="false" autocapitalize="off">
+            <p class="hint" id="si-autofill-hint">Leave it empty. The passkey tells the site who you are.</p>
+          </div>
+          <div class="notice bad" id="frame-get" hidden><strong>Passkeys are blocked in this frame.</strong> The embedding page doesn't grant <code>publickey-credentials-get</code>. Open the file from <code>localhost</code> or an HTTPS site instead.</div>
+          <button class="btn btn-primary" type="submit" id="btn-signin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0 3.5-1 6.5-2.5 8.5M8 7.5A5 5 0 0 1 17 10c0 2-.2 4-.7 5.8M5 10a7 7 0 0 1 1-3.6M14.5 19.5c.6-1.3 1-2.7 1.3-4.2M12 3a7 7 0 0 1 7 7v1M8.6 13.5c-.2 1.8-.8 3.5-1.6 5"/></svg>
+            Sign in with a passkey
+          </button>
+          <div id="si-msg" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-hd">
+          <h2>Saved passkeys</h2>
+          <span class="eyebrow" id="key-count">0 stored</span>
+        </div>
+        <div class="panel-bd">
+          <ul class="keys" id="keys"></ul>
+          <p class="hint">This list is the relying party's database: credential ID and public key per account. It lives in this browser only. Removing an entry also asks your passkey manager to forget the passkey, where the browser supports it.</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-label="Ceremony trace">
+      <div class="trace-hd">
+        <div class="trace-title">
+          <span class="eyebrow" id="trace-eyebrow">Registration ceremony</span>
+          <h2 id="trace-heading">What happens when you create a passkey</h2>
+        </div>
+        <span class="status-pill" id="trace-status">waiting</span>
+      </div>
+      <ol class="steps" id="steps"></ol>
+    </section>
+  </div>
+
+  <p class="foot">Follows <a href="https://www.w3.org/TR/webauthn-3/" target="_blank" rel="noopener">W3C Web Authentication Level 3</a>. The relying party ID is this page's host name, and the server side (challenges, checks, the credential store) runs in page script so you can see it. A production relying party does the same checks on its own server.</p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- bytes ----------
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const u8 = (x) => x instanceof Uint8Array ? x : ArrayBuffer.isView(x) ? new Uint8Array(x.buffer, x.byteOffset, x.byteLength) : new Uint8Array(x);
+  const b64u = {
+    enc(x) { let s = ""; for (const b of u8(x)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); },
+    dec(str) { str = str.replace(/-/g, "+").replace(/_/g, "/"); while (str.length % 4) str += "="; const s = atob(str); const out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out; }
+  };
+  const hex = (x) => [...u8(x)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const short = (s, n = 12) => s.length > n * 2 + 1 ? s.slice(0, n) + "…" + s.slice(-n) : s;
+  const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
+  const concat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; };
+  const sha256 = async (d) => new Uint8Array(await crypto.subtle.digest("SHA-256", d));
+
+  // Minimal CBOR decoder (RFC 8949), enough for attestation objects and COSE keys.
+  function cbor(bytes, start = 0) {
+    const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = start;
+    const arg = (ai) => {
+      if (ai < 24) return ai;
+      if (ai === 24) return v.getUint8(p++);
+      if (ai === 25) { const x = v.getUint16(p); p += 2; return x; }
+      if (ai === 26) { const x = v.getUint32(p); p += 4; return x; }
+      if (ai === 27) { const x = Number(v.getBigUint64(p)); p += 8; return x; }
+      throw new Error("Indefinite-length CBOR is not supported");
+    };
+    const item = () => {
+      const ib = v.getUint8(p++), mt = ib >> 5, ai = ib & 31;
+      if (mt === 7) {
+        if (ai === 20) return false; if (ai === 21) return true; if (ai === 22) return null; if (ai === 23) return undefined;
+        if (ai === 26) { const x = v.getFloat32(p); p += 4; return x; }
+        if (ai === 27) { const x = v.getFloat64(p); p += 8; return x; }
+        throw new Error("Unsupported CBOR simple value");
+      }
+      const n = arg(ai);
+      switch (mt) {
+        case 0: return n;
+        case 1: return -1 - n;
+        case 2: { const b = bytes.slice(p, p + n); p += n; return b; }
+        case 3: { const s = dec.decode(bytes.subarray(p, p + n)); p += n; return s; }
+        case 4: { const a = []; for (let i = 0; i < n; i++) a.push(item()); return a; }
+        case 5: { const m = new Map(); for (let i = 0; i < n; i++) { const k = item(); m.set(k, item()); } return m; }
+        case 6: return item();
+      }
+    };
+    const value = item();
+    return { value, end: p };
+  }
+
+  function parseAuthData(raw) {
+    const ad = u8(raw), v = new DataView(ad.buffer, ad.byteOffset, ad.byteLength);
+    const f = ad[32];
+    const out = {
+      raw: ad, rpIdHash: ad.slice(0, 32), flagsByte: f, signCount: v.getUint32(33),
+      flags: { UP: !!(f & 1), UV: !!(f & 4), BE: !!(f & 8), BS: !!(f & 16), AT: !!(f & 64), ED: !!(f & 128) },
+      attLen: 0
+    };
+    let p = 37;
+    if (out.flags.AT) {
+      out.aaguid = ad.slice(p, p + 16); p += 16;
+      const len = v.getUint16(p); p += 2;
+      out.credentialId = ad.slice(p, p + len); p += len;
+      const { value, end } = cbor(ad, p);
+      out.coseKey = value; out.attLen = end - 37; p = end;
+    }
+    if (out.flags.ED) out.extensions = cbor(ad, p).value;
+    return out;
+  }
+
+  const ALGS = { "-7": "ES256", "-8": "EdDSA", "-35": "ES384", "-36": "ES512", "-257": "RS256" };
+  const algName = (a) => ALGS[a] || "alg " + a;
+
+  function coseToJwk(m) {
+    const kty = m.get(1), alg = m.get(3);
+    if (kty === 2) return { alg, jwk: { kty: "EC", crv: { 1: "P-256", 2: "P-384", 3: "P-521" }[m.get(-1)], x: b64u.enc(m.get(-2)), y: b64u.enc(m.get(-3)) } };
+    if (kty === 3) return { alg, jwk: { kty: "RSA", n: b64u.enc(m.get(-1)), e: b64u.enc(m.get(-2)) } };
+    if (kty === 1 && m.get(-1) === 6) return { alg, jwk: { kty: "OKP", crv: "Ed25519", x: b64u.enc(m.get(-2)) } };
+    throw new Error("Unsupported COSE key type " + kty);
+  }
+
+  // WebAuthn ECDSA signatures are ASN.1 DER; WebCrypto wants raw r‖s.
+  function derToRaw(sig, size) {
+    let p = 2; if (sig[1] & 0x80) p = 2 + (sig[1] & 0x7f);
+    const int = () => {
+      if (sig[p++] !== 0x02) throw new Error("Malformed DER signature");
+      const len = sig[p++]; let x = sig.slice(p, p + len); p += len;
+      while (x.length > size && x[0] === 0) x = x.slice(1);
+      const out = new Uint8Array(size); out.set(x, size - x.length); return out;
+    };
+    return concat(int(), int());
+  }
+
+  async function verifySignature(rec, data, sig) {
+    const { alg, jwk } = rec;
+    if (alg === -7 || alg === -35 || alg === -36) {
+      const size = { "P-256": 32, "P-384": 48, "P-521": 66 }[jwk.crv];
+      const hash = { "-7": "SHA-256", "-35": "SHA-384", "-36": "SHA-512" }[alg];
+      const key = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: jwk.crv }, false, ["verify"]);
+      return crypto.subtle.verify({ name: "ECDSA", hash }, key, derToRaw(sig, size), data);
+    }
+    if (alg === -257) {
+      const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+      return crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sig, data);
+    }
+    if (alg === -8) {
+      const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
+      return crypto.subtle.verify({ name: "Ed25519" }, key, sig, data);
+    }
+    throw new Error("No verifier for " + algName(alg));
+  }
+
+  // A few well-known passkey providers, from the community AAGUID list.
+  const AAGUIDS = {
+    "fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "iCloud Keychain",
+    "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4": "Google Password Manager",
+    "adce0002-35bc-c60a-648b-0b25f1f05503": "Chrome on Mac",
+    "08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello",
+    "9ddd1817-af5a-4672-a2b9-3e3dd95000a9": "Windows Hello",
+    "6028b017-b1d4-4c02-b4b3-afcdafc96bb2": "Windows Hello",
+    "bada5566-a7aa-401f-bd96-45619a55120d": "1Password",
+    "d548826e-79b4-db40-a3d8-11116f7e8349": "Bitwarden",
+    "531126d6-e717-415c-9320-3d9aa6981239": "Dashlane",
+    "53414d53-554e-4700-0000-000000000000": "Samsung Pass",
+    "b84e4048-15dc-4dd0-8640-f4f60813c8af": "NordPass",
+    "0ea242b4-43c4-4a1b-8b17-dd6d0b6baec6": "Keeper"
+  };
+  const uuid = (b) => { const h = hex(b); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`; };
+
+  // JSON view of WebAuthn options, with binary fields shown as base64url.
+  const jsonView = (o) => JSON.stringify(o, (k, v) => (v instanceof Uint8Array || v instanceof ArrayBuffer) ? b64u.enc(v) : v, 2);
+
+  // ---------- relying-party "database" ----------
+  const STORE = "passkey-lab:v1";
+  let db = { creds: [] };
+  try { const s = localStorage.getItem(STORE); if (s) db = JSON.parse(s); } catch (e) { /* storage unavailable */ }
+  if (!Array.isArray(db.creds)) db = { creds: [] };
+  const persist = () => { try { localStorage.setItem(STORE, JSON.stringify(db)); } catch (e) { /* storage unavailable */ } };
+
+  const rpId = location.hostname;
+  let session = null;
+
+  // ---------- DOM helpers ----------
+  const $ = (s) => document.querySelector(s);
+  function h(tag, attrs = {}, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v; else if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return el;
+  }
+  const ago = (t) => {
+    const s = Math.round((Date.now() - t) / 1000);
+    if (s < 45) return "just now"; if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago"; return new Date(t).toLocaleDateString();
+  };
+  const KEY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4.5"/><path d="M11.2 11.2 20 20M16.5 16.5l2-2M14 14l2-2"/></svg>';
+
+  // ---------- environment ----------
+  function frameAllows(feature) {
+    const pol = document.permissionsPolicy || document.featurePolicy;
+    try { return pol && pol.allowsFeature ? pol.allowsFeature(feature) : null; } catch (e) { return null; }
+  }
+  const env = { webauthn: "PublicKeyCredential" in window, conditional: false };
+  const embedded = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+
+  async function detectEnv() {
+    const chips = [];
+    const chip = (state, label, extra) => h("span", { class: "chip" }, h("span", { class: "dot " + state }), h("b", {}, label), extra || null);
+    let caps = {};
+    if (env.webauthn && PublicKeyCredential.getClientCapabilities) { try { caps = await PublicKeyCredential.getClientCapabilities(); } catch (e) { /* older browser */ } }
+    let platform = caps.passkeyPlatformAuthenticator ?? caps.userVerifyingPlatformAuthenticator;
+    if (platform === undefined && env.webauthn) { try { platform = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (e) { /* unknown */ } }
+    let cond = caps.conditionalGet;
+    if (cond === undefined && env.webauthn && PublicKeyCredential.isConditionalMediationAvailable) { try { cond = await PublicKeyCredential.isConditionalMediationAvailable(); } catch (e) { /* unknown */ } }
+    env.conditional = !!cond;
+
+    chips.push(chip(env.webauthn ? "on" : "off", env.webauthn ? "WebAuthn available" : "No WebAuthn in this browser"));
+    if (env.webauthn) {
+      chips.push(chip(platform ? "on" : "maybe", platform ? "Built-in authenticator" : "No built-in authenticator"));
+      chips.push(chip(cond ? "on" : "maybe", cond ? "Passkey autofill" : "No passkey autofill"));
+      if (caps.hybridTransport !== undefined) chips.push(chip(caps.hybridTransport ? "on" : "maybe", caps.hybridTransport ? "Phone sign-in" : "No phone sign-in"));
+    }
+    if (!window.isSecureContext) chips.push(chip("off", "Not a secure context"));
+    if (embedded) chips.push(chip("maybe", "Embedded frame"));
+    chips.push(h("span", { class: "chip" }, "RP ID", h("code", {}, rpId || "(none)")));
+    $("#env").replaceChildren(...chips);
+
+    if (frameAllows("publickey-credentials-create") === false) $("#frame-create").hidden = false;
+    if (frameAllows("publickey-credentials-get") === false) $("#frame-get").hidden = false;
+    if (!cond) $("#si-autofill-hint").textContent = "Leave it empty. The passkey tells the site who you are.";
+    else $("#si-autofill-hint").textContent = "Focus the field to pick a passkey from autofill, or use the button. Either way, leave it empty: the passkey tells the site who you are.";
+  }
+
+  function explain(err) {
+    const n = err && err.name;
+    const said = err && err.message ? ` Browser message: "${err.message}"` : "";
+    if (n === "NotAllowedError" && embedded) return "The browser refused the request. This page is running inside an embedded frame, and most browsers block passkeys there: Safari, Firefox and in-app web views never allow creating a passkey in a frame from another site. Open the standalone copy in a normal browser tab." + said;
+    if (n === "NotAllowedError") return "The prompt was dismissed, timed out, or passkeys aren't allowed on this page. Try again and finish the prompt." + said;
+    if (n === "InvalidStateError") return "This authenticator already holds a passkey for this account. Pick another authenticator or remove the saved passkey first." + said;
+    if (n === "SecurityError") return `The browser rejected the relying party ID "${rpId}" for this origin. Serve the page from localhost or an HTTPS host name, not an IP address.` + said;
+    if (n === "NotSupportedError") return "No authenticator here supports the requested options. Try a different authenticator setting." + said;
+    if (n === "AbortError") return "The request was cancelled.";
+    return (err && err.message) || String(err);
+  }
+  function message(slot, kind, strong, text) {
+    $(slot).replaceChildren(strong ? h("div", { class: "notice " + kind }, h("strong", {}, strong), " ", text) : "");
+  }
+
+  // ---------- trace rendering ----------
+  const trace = { steps: [] };
+
+  function verdict(v) {
+    if (v === true) return h("span", { class: "verdict ok" }, "match");
+    if (v === false) return h("span", { class: "verdict bad" }, "fail");
+    if (typeof v === "string") return h("span", { class: "verdict info" }, v);
+    return null;
+  }
+  function kv(rows) {
+    return h("dl", { class: "kv" }, rows.filter(Boolean).flatMap(([k, val, v]) => [h("dt", {}, k), h("dd", {}, h("span", { class: "v" }, val), verdict(v))]));
+  }
+  function flags(f) {
+    const meaning = { UP: "User present", UV: "User verified", BE: "Backup eligible (can sync)", BS: "Backed up (synced now)", AT: "Attested credential data included", ED: "Extension data included" };
+    return h("div", { class: "flags" }, Object.keys(meaning).map((k) => h("span", { class: "flag" + (f[k] ? " on" : ""), title: meaning[k] }, k)));
+  }
+  function byteMap(ad) {
+    const segs = [["hash", "rpIdHash", 32], ["flg", "flags", 1], ["cnt", "signCount", 4]];
+    if (ad.attLen) segs.push(["att", "credential data", ad.attLen]);
+    return h("div", { class: "bytes", "aria-label": "Layout of the authenticator data bytes" },
+      segs.map(([c, name, n]) => h("div", { class: "seg " + c, style: `flex:${n} 1 0` }, h("i"), h("span", { title: `${name}, ${n} bytes` }, `${name} ${n}B`))));
+  }
+  function raw(label, text) {
+    return h("details", { class: "raw" }, h("summary", {}, label), h("pre", { class: "code" }, text));
+  }
+
+  function renderTrace() {
+    $("#trace-eyebrow").textContent = trace.eyebrow;
+    $("#trace-heading").textContent = trace.heading;
+    const st = $("#trace-status");
+    st.className = "status-pill" + (trace.state ? " " + trace.state : "");
+    st.textContent = { ok: "verified", bad: "rejected", run: "in progress" }[trace.state] || "waiting";
+    $("#steps").replaceChildren(...trace.steps.map((s, i) => h("li", { class: "step " + (s.status || "wait") },
+      h("div", { class: "node", "aria-hidden": "true" }, s.status === "ok" ? "✓" : s.status === "bad" ? "✕" : String(i + 1)),
+      h("div", { class: "step-body" },
+        h("div", { class: "step-title" }, h("h3", {}, s.title), h("span", { class: "who" }, s.who)),
+        h("p", { class: "step-desc" }, s.desc),
+        ...(s.body || [])))));
+  }
+  function startTrace(kind, steps, live = true) {
+    trace.eyebrow = kind === "reg" ? "Registration ceremony" : "Authentication ceremony";
+    trace.heading = live ? (kind === "reg" ? "Creating a passkey" : "Signing in with a passkey") : (kind === "reg" ? "What happens when you create a passkey" : "What happens when you sign in");
+    trace.state = live ? "run" : "";
+    trace.kind = kind;
+    trace.live = live;
+    trace.steps = steps.map((s) => ({ ...s }));
+    renderTrace();
+  }
+  function setStep(i, patch) { Object.assign(trace.steps[i], patch); renderTrace(); }
+  function finishTrace(ok) { trace.state = ok ? "ok" : "bad"; trace.heading = ok ? (trace.kind === "reg" ? "Passkey created and stored" : "Signed in") : (trace.kind === "reg" ? "Registration rejected" : "Sign-in rejected"); renderTrace(); }
+
+  const REG_STEPS = [
+    { who: "server", title: "Issue creation options", desc: "The relying party makes a fresh random challenge and describes the account, itself, and which key algorithms it accepts." },
+    { who: "authenticator", title: "Create a key pair", desc: "navigator.credentials.create() hands the options to an authenticator. After you verify, it makes a new key pair scoped to this site and returns only the public half." },
+    { who: "server", title: "Check client data", desc: "clientDataJSON is what the browser saw: the ceremony type, the challenge and the origin. All three must match what the server expects." },
+    { who: "server", title: "Parse authenticator data", desc: "The authenticator's signed record: a hash of the RP ID, flag bits, a counter, and the new credential's ID and public key in COSE format." },
+    { who: "server", title: "Store the credential", desc: "The server saves the credential ID and public key against the account. No password or secret exists to leak." }
+  ];
+  const AUTH_STEPS = [
+    { who: "server", title: "Issue a challenge", desc: "The relying party sends a fresh challenge. allowCredentials stays empty, so the browser offers any passkey this site has, with no username needed." },
+    { who: "authenticator", title: "Sign the challenge", desc: "navigator.credentials.get() lets you pick a passkey. The authenticator verifies you, then signs the challenge with that passkey's private key." },
+    { who: "server", title: "Check client data", desc: "The browser reports the ceremony type, the challenge it was given and the origin it ran on. Phishing sites fail here, because their origin differs." },
+    { who: "server", title: "Check authenticator data", desc: "The RP ID hash must match this site, the user-present flag must be set, and a non-zero counter must have moved forward." },
+    { who: "server", title: "Verify the signature", desc: "The server checks the signature over authenticatorData ‖ SHA-256(clientDataJSON) with the public key it stored at registration." }
+  ];
+
+  // ---------- conditional mediation (autofill) ----------
+  let condCtl = null, condPending = null;
+  async function stopConditional() {
+    if (condCtl) { condCtl.abort(); condCtl = null; }
+    if (condPending) { try { await condPending; } catch (e) { /* aborted */ } condPending = null; }
+  }
+  function startConditional() {
+    if (!env.conditional || condCtl || frameAllows("publickey-credentials-get") === false) return;
+    condCtl = new AbortController();
+    const publicKey = authOptions();
+    condPending = navigator.credentials.get({ publicKey, mediation: "conditional", signal: condCtl.signal })
+      .then(async (cred) => {
+        condCtl = null; condPending = null;
+        startTrace("auth", AUTH_STEPS);
+        setStep(0, { status: "ok", body: [raw("Show request options", jsonView(publicKey))] });
+        await finishAuthentication(cred, publicKey);
+      })
+      .catch((err) => { if (err.name !== "AbortError") console.debug("conditional get ended:", err); condCtl = null; condPending = null; });
+  }
+
+  // ---------- registration ----------
+  async function register(ev) {
+    ev.preventDefault();
+    const username = $("#reg-username").value.trim();
+    const displayName = $("#reg-display").value.trim() || username;
+    if (!username) { message("#reg-msg", "bad", "Enter a username.", "The authenticator stores it with the passkey so you can recognise it later."); $("#reg-username").focus(); return; }
+    if (!env.webauthn) { message("#reg-msg", "bad", "This browser has no WebAuthn.", "Try a current version of Chrome, Edge, Safari or Firefox."); return; }
+    message("#reg-msg");
+    const btn = $("#btn-register"); btn.disabled = true;
+    // Only yield when a request is pending: Safari needs create() close to the click.
+    if (condCtl || condPending) await stopConditional();
+
+    const existing = db.creds.filter((c) => c.username === username);
+    const userId = existing.length ? b64u.dec(existing[0].userId) : rand(16);
+    const challenge = rand(32);
+    const attach = $("#opt-attach").value, uv = $("#opt-uv").value;
+    const publicKey = {
+      challenge,
+      rp: { name: "Passkey Lab", id: rpId },
+      user: { id: userId, name: username, displayName },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -8 }, { type: "public-key", alg: -257 }],
+      timeout: 120000,
+      attestation: $("#opt-att").value,
+      authenticatorSelection: { residentKey: "required", requireResidentKey: true, userVerification: uv, ...(attach !== "any" ? { authenticatorAttachment: attach } : {}) },
+      excludeCredentials: existing.map((c) => ({ type: "public-key", id: b64u.dec(c.id), transports: c.transports })),
+      extensions: { credProps: true }
+    };
+
+    startTrace("reg", REG_STEPS);
+    setStep(0, { status: "ok", body: [kv([
+      ["challenge", short(b64u.enc(challenge)), "32 random bytes"],
+      ["rp.id", rpId],
+      ["user.id", b64u.enc(userId), existing.length ? "existing account" : "new account"],
+      ["algorithms", publicKey.pubKeyCredParams.map((p) => algName(p.alg)).join(", ")],
+      ["excludeCredentials", existing.length ? `${existing.length} already registered` : "none"]
+    ]), raw("Show creation options", jsonView({ publicKey })) ]});
+    setStep(1, { status: "run" });
+
+    let cred;
+    try {
+      cred = await navigator.credentials.create({ publicKey });
+    } catch (err) {
+      setStep(1, { status: "bad", body: [kv([["error", err.name || "Error", false]]), h("p", { class: "step-desc" }, explain(err))] });
+      finishTrace(false);
+      message("#reg-msg", "bad", "No passkey created.", explain(err));
+      btn.disabled = false; startConditionalIfSignin();
+      return;
+    }
+
+    let ok = true;
+    try {
+      const r = cred.response;
+      const transports = r.getTransports ? r.getTransports() : [];
+      setStep(1, { status: "ok", body: [kv([
+        ["credential id", short(cred.id, 16)],
+        ["attachment", cred.authenticatorAttachment || "not reported"],
+        ["transports", transports.length ? transports.join(", ") : "not reported"]
+      ])]});
+
+      const cdBytes = u8(r.clientDataJSON), cd = JSON.parse(dec.decode(cdBytes));
+      const c1 = cd.type === "webauthn.create", c2 = cd.challenge === b64u.enc(challenge), c3 = cd.origin === location.origin;
+      ok = c1 && c2 && c3;
+      setStep(2, { status: ok ? "ok" : "bad", body: [kv([
+        ["type", cd.type, c1], ["challenge", short(cd.challenge), c2], ["origin", cd.origin, c3],
+        cd.crossOrigin ? ["crossOrigin", "true (embedded)", "info"] : null,
+        cd.topOrigin ? ["topOrigin", cd.topOrigin, "info"] : null
+      ]), raw("Show clientDataJSON", JSON.stringify(cd, null, 2))] });
+
+      const att = cbor(u8(r.attestationObject)).value;
+      const fmt = att.get("fmt");
+      const ad = parseAuthData(att.get("authData"));
+      const hashOk = same(ad.rpIdHash, await sha256(enc.encode(rpId)));
+      const idOk = !!ad.credentialId && b64u.enc(ad.credentialId) === cred.id;
+      const upOk = ad.flags.UP, uvOk = uv !== "required" || ad.flags.UV;
+      const key = coseToJwk(ad.coseKey);
+      const ag = ad.aaguid ? uuid(ad.aaguid) : "";
+      const agName = /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(ag) ? "not disclosed" : AAGUIDS[ag] || "unknown provider";
+      const rk = cred.getClientExtensionResults().credProps?.rk;
+      const step3ok = hashOk && idOk && upOk && uvOk;
+      ok = ok && step3ok;
+      setStep(3, { status: step3ok ? "ok" : "bad", body: [
+        byteMap(ad),
+        flags(ad.flags),
+        kv([
+          ["rpIdHash", short(hex(ad.rpIdHash), 10), hashOk],
+          ["user present", ad.flags.UP ? "yes" : "no", upOk],
+          ["user verified", ad.flags.UV ? "yes" : "no", uv === "required" ? uvOk : "info"],
+          ["sync", ad.flags.BE ? (ad.flags.BS ? "synced passkey, backed up" : "can sync, not backed up yet") : "device-bound", "info"],
+          ["signCount", String(ad.signCount)],
+          ["AAGUID", ag, agName],
+          ["credential id", short(b64u.enc(ad.credentialId), 16), idOk],
+          ["public key", `${algName(key.alg)} · ${key.jwk.crv || "RSA"}`],
+          ["attestation fmt", fmt],
+          rk !== undefined ? ["discoverable", rk ? "yes (credProps)" : "no", rk ? "info" : "info"] : null
+        ]),
+        raw("Show public key (JWK)", JSON.stringify(key.jwk, null, 2))
+      ]});
+
+      if (!ok) throw new Error("Checks failed");
+
+      const rec = {
+        id: cred.id, userId: b64u.enc(userId), username, displayName,
+        alg: key.alg, jwk: key.jwk, signCount: ad.signCount,
+        transports, aaguid: ag, provider: agName, synced: ad.flags.BE, backedUp: ad.flags.BS,
+        attachment: cred.authenticatorAttachment || null, created: Date.now(), lastUsed: null
+      };
+      db.creds.unshift(rec); persist(); renderKeys();
+      setStep(4, { status: "ok", body: [kv([
+        ["account", `${displayName} (${username})`],
+        ["stored", `credential id + ${algName(key.alg)} public key`],
+        ["total", `${db.creds.length} passkey${db.creds.length === 1 ? "" : "s"} on file`]
+      ])]});
+      finishTrace(true);
+      message("#reg-msg", "ok", "Passkey created.", "Switch to Sign in to use it.");
+    } catch (err) {
+      const i = trace.steps.findIndex((s) => s.status !== "ok");
+      if (i >= 0 && trace.steps[i].status !== "bad") setStep(i, { status: "bad", body: [kv([["error", err.message, false]])] });
+      setStep(4, { status: "bad", body: [h("p", { class: "step-desc" }, "Nothing was stored, because a check above failed.")] });
+      finishTrace(false);
+      message("#reg-msg", "bad", "Registration rejected.", "A server-side check failed. See the trace for which one.");
+    }
+    btn.disabled = false;
+  }
+
+  // ---------- authentication ----------
+  function authOptions() {
+    return { challenge: rand(32), rpId, timeout: 120000, userVerification: "preferred", allowCredentials: [] };
+  }
+
+  async function signIn(ev) {
+    ev.preventDefault();
+    if (!env.webauthn) { message("#si-msg", "bad", "This browser has no WebAuthn.", "Try a current version of Chrome, Edge, Safari or Firefox."); return; }
+    message("#si-msg");
+    const btn = $("#btn-signin"); btn.disabled = true;
+    if (condCtl || condPending) await stopConditional();
+    const publicKey = authOptions();
+    startTrace("auth", AUTH_STEPS);
+    setStep(0, { status: "ok", body: [kv([
+      ["challenge", short(b64u.enc(publicKey.challenge)), "32 random bytes"],
+      ["rpId", rpId],
+      ["allowCredentials", "[] (discoverable)"],
+      ["userVerification", publicKey.userVerification]
+    ]), raw("Show request options", jsonView({ publicKey }))] });
+    setStep(1, { status: "run" });
+    let cred;
+    try {
+      cred = await navigator.credentials.get({ publicKey });
+    } catch (err) {
+      setStep(1, { status: "bad", body: [kv([["error", err.name || "Error", false]]), h("p", { class: "step-desc" }, explain(err))] });
+      finishTrace(false);
+      message("#si-msg", "bad", "Not signed in.", explain(err));
+      btn.disabled = false; startConditionalIfSignin();
+      return;
+    }
+    await finishAuthentication(cred, publicKey);
+    btn.disabled = false;
+  }
+
+  async function finishAuthentication(cred, publicKey) {
+    const r = cred.response;
+    const rec = db.creds.find((c) => c.id === cred.id);
+    const handle = r.userHandle ? b64u.enc(r.userHandle) : null;
+    const fail = (i, why) => {
+      for (let j = i + 1; j < trace.steps.length; j++) if (!trace.steps[j].status) trace.steps[j].status = "wait";
+      finishTrace(false); message("#si-msg", "bad", "Sign-in rejected.", why); startConditionalIfSignin();
+    };
+
+    const handleOk = !rec || !handle || handle === rec.userId;
+    setStep(1, { status: rec && handleOk ? "ok" : "bad", body: [kv([
+      ["credential id", short(cred.id, 16), rec ? true : false],
+      ["userHandle", handle ? short(handle, 12) : "not returned", handle ? handleOk : "info"],
+      ["attachment", cred.authenticatorAttachment || "not reported"],
+      ["account", rec ? `${rec.displayName} (${rec.username})` : "unknown to this site", rec ? true : false]
+    ])]});
+    if (!rec) {
+      if (PublicKeyCredential.signalUnknownCredential) PublicKeyCredential.signalUnknownCredential({ rpId, credentialId: cred.id }).catch(() => {});
+      return fail(1, "This site has no record of that passkey, probably because its saved data was cleared. Create a new passkey, and remove the stale one from your passkey manager.");
+    }
+    if (!handleOk) return fail(1, "The passkey's user handle doesn't belong to the account on file.");
+
+    const cdBytes = u8(r.clientDataJSON), cd = JSON.parse(dec.decode(cdBytes));
+    const c1 = cd.type === "webauthn.get", c2 = cd.challenge === b64u.enc(publicKey.challenge), c3 = cd.origin === location.origin;
+    setStep(2, { status: c1 && c2 && c3 ? "ok" : "bad", body: [kv([
+      ["type", cd.type, c1], ["challenge", short(cd.challenge), c2], ["origin", cd.origin, c3],
+      cd.crossOrigin ? ["crossOrigin", "true (embedded)", "info"] : null
+    ]), raw("Show clientDataJSON", JSON.stringify(cd, null, 2))] });
+    if (!(c1 && c2 && c3)) return fail(2, "The client data didn't match this request.");
+
+    const ad = parseAuthData(r.authenticatorData);
+    const hashOk = same(ad.rpIdHash, await sha256(enc.encode(rpId)));
+    const counterUsed = ad.signCount !== 0 || rec.signCount !== 0;
+    const countOk = !counterUsed || ad.signCount > rec.signCount;
+    const s3 = hashOk && ad.flags.UP && countOk;
+    setStep(3, { status: s3 ? "ok" : "bad", body: [byteMap(ad), flags(ad.flags), kv([
+      ["rpIdHash", short(hex(ad.rpIdHash), 10), hashOk],
+      ["user present", ad.flags.UP ? "yes" : "no", ad.flags.UP],
+      ["user verified", ad.flags.UV ? "yes" : "no", "info"],
+      ["signCount", `${ad.signCount} (stored ${rec.signCount})`, counterUsed ? countOk : "not used"],
+      ["sync", ad.flags.BS ? "backed up" : ad.flags.BE ? "can sync" : "device-bound", "info"]
+    ])] });
+    if (!s3) return fail(3, countOk ? "The authenticator data failed a check." : "The signature counter went backwards, which can mean a cloned authenticator.");
+
+    const signed = concat(u8(r.authenticatorData), await sha256(cdBytes));
+    const sig = u8(r.signature);
+    let valid = false, err = null;
+    try { valid = await verifySignature(rec, signed, sig); } catch (e) { err = e; }
+    setStep(4, { status: valid ? "ok" : "bad", body: [kv([
+      ["algorithm", algName(rec.alg)],
+      ["signed bytes", `${r.authenticatorData.byteLength} B authData ‖ 32 B hash`],
+      ["signature", short(hex(sig), 14)],
+      ["result", valid ? "valid" : err ? explain(err) : "invalid", valid]
+    ])] });
+    if (!valid) return fail(4, err ? "This browser can't verify " + algName(rec.alg) + " signatures." : "The signature doesn't match the stored public key.");
+
+    rec.signCount = ad.signCount; rec.lastUsed = Date.now(); rec.backedUp = ad.flags.BS; persist();
+    session = { rec, at: Date.now(), uv: ad.flags.UV };
+    finishTrace(true);
+    renderSession(); renderKeys();
+    message("#si-msg", "ok", `Welcome back, ${rec.displayName}.`, "You signed in without typing anything.");
+    if (PublicKeyCredential.signalCurrentUserDetails) PublicKeyCredential.signalCurrentUserDetails({ rpId, userId: rec.userId, name: rec.username, displayName: rec.displayName }).catch(() => {});
+  }
+
+  // ---------- views ----------
+  function renderSession() {
+    const el = $("#session");
+    if (!session) { el.hidden = true; el.replaceChildren(); return; }
+    const r = session.rec;
+    const initials = r.displayName.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    el.replaceChildren(h("div", { class: "session" },
+      h("div", { class: "avatar", "aria-hidden": "true" }, initials),
+      h("div", { class: "session-txt" }, h("strong", {}, `Signed in as ${r.displayName}`),
+        h("span", {}, `${r.username} · ${session.uv ? "verified" : "present"} with ${r.provider !== "unknown provider" && r.provider !== "not disclosed" ? r.provider : "a passkey"}`)),
+      h("button", { class: "btn btn-quiet", type: "button", onclick: () => { session = null; renderSession(); message("#si-msg"); startConditionalIfSignin(); } }, "Sign out")));
+    el.hidden = false;
+  }
+
+  function renderKeys() {
+    const list = $("#keys");
+    $("#key-count").textContent = `${db.creds.length} stored`;
+    if (!db.creds.length) { list.replaceChildren(h("li", {}, h("p", { class: "empty" }, "No passkeys yet. Create one and it shows up here."))); return; }
+    list.replaceChildren(...db.creds.map((c) => {
+      const ico = h("div", { class: "key-ico", "aria-hidden": "true" }); ico.innerHTML = KEY_SVG;
+      const rm = h("button", { class: "btn btn-quiet", type: "button", "aria-label": `Remove passkey for ${c.username}` }, "Remove");
+      let armed = null;
+      rm.addEventListener("click", () => {
+        if (!armed) {
+          rm.textContent = "Confirm"; rm.className = "btn btn-quiet btn-danger";
+          armed = setTimeout(() => { armed = null; rm.textContent = "Remove"; rm.className = "btn btn-quiet"; }, 4000);
+          return;
+        }
+        clearTimeout(armed);
+        db.creds = db.creds.filter((x) => x.id !== c.id); persist();
+        if (session && session.rec.id === c.id) { session = null; renderSession(); }
+        if (window.PublicKeyCredential && PublicKeyCredential.signalUnknownCredential) PublicKeyCredential.signalUnknownCredential({ rpId, credentialId: c.id }).catch(() => {});
+        renderKeys();
+      });
+      const active = session && session.rec.id === c.id;
+      return h("li", { class: "key" }, ico,
+        h("div", {},
+          h("div", { class: "key-name" }, c.displayName, " ", h("span", { class: "tag" + (c.synced ? " sync" : "") }, c.synced ? "synced" : "device-bound"), active ? h("span", { class: "tag sync" }, "signed in") : null),
+          h("div", { class: "key-meta" },
+            h("span", {}, c.username), h("span", {}, c.provider !== "unknown provider" && c.provider !== "not disclosed" ? c.provider : algName(c.alg)),
+            h("span", {}, "created " + ago(c.created)), h("span", {}, c.lastUsed ? "used " + ago(c.lastUsed) : "never used"),
+            h("code", { title: c.id }, short(c.id, 6)))),
+        rm);
+    }));
+  }
+
+  // ---------- tabs ----------
+  function showTab(which) {
+    const reg = which === "register";
+    $("#tab-register").setAttribute("aria-selected", String(reg));
+    $("#tab-signin").setAttribute("aria-selected", String(!reg));
+    $("#pane-register").hidden = !reg;
+    $("#pane-signin").hidden = reg;
+    if (!trace.live) startTrace(reg ? "reg" : "auth", reg ? REG_STEPS : AUTH_STEPS, false);
+    if (reg) stopConditional(); else startConditional();
+    try { localStorage.setItem(STORE + ":tab", which); } catch (e) { /* ignore */ }
+  }
+  function startConditionalIfSignin() { if (!$("#pane-signin").hidden) startConditional(); }
+
+  $("#tab-register").addEventListener("click", () => showTab("register"));
+  $("#tab-signin").addEventListener("click", () => showTab("signin"));
+  $(".tabs").addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const next = $("#tab-register").getAttribute("aria-selected") === "true" ? "signin" : "register";
+    showTab(next); $("#tab-" + next).focus();
+  });
+  $("#pane-register").addEventListener("submit", register);
+  $("#pane-signin").addEventListener("submit", signIn);
+
+  renderKeys();
+  renderSession();
+  let initialTab = "register";
+  try { if (localStorage.getItem(STORE + ":tab") === "signin" && db.creds.length) initialTab = "signin"; } catch (e) { /* ignore */ }
+  detectEnv().then(() => showTab(initialTab));
+  startTrace(initialTab === "register" ? "reg" : "auth", initialTab === "register" ? REG_STEPS : AUTH_STEPS, false);
+})();
+</script>
+</body>
+</html>
